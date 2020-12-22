@@ -4,4 +4,4 @@ Adapter from SOFiSTiK to Rhino.
 
 Allow reading out SOFiSTiK databases, store them to .json format,
 
-or open them directly for post-processing into Rhino documents.
+and open them directly into Rhino documents for post-processing.
