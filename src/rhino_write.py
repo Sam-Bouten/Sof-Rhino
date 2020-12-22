@@ -1,5 +1,3 @@
-#TODO allow calls to this module from Rhino / external script called from Rhino
-
 # -*- coding: utf-8 -*-
 from collections import namedtuple
 import System.Drawing.Color as color
@@ -52,6 +50,7 @@ def write_sof_geometry(cdb_dict):
             if not guid: print("SOFiSTiK object {0} could not be added.".format(att.Name))
     
     sc.doc.Objects.UnselectAll()
+    sc.doc.Views.Redraw()
 
 
 def add_sof_layer(layer_name, layer_color):
