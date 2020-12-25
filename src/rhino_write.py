@@ -54,7 +54,7 @@ def write_sof_geometry(cdb_dict):
 
 
 def add_sof_layer(layer_name, layer_color):
-    """Add layer to Rhino document, or clear object from layer if pre-existing.
+    """Add layer to Rhino document, clear all objects from layer if pre-existing.
     
     Parameters
     ----------
