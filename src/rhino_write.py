@@ -201,11 +201,11 @@ def _generate_hexahedron(points):
 
 sof_geo_type = namedtuple("sof_geo", ["name_prefix", "layer_name", "layer_color", "generate", "add", "ignore_attributes"])
 sof_geometry_types = {
-    "nodes": sof_geo_type("N",  "SOF_nodes",    color.DarkOrange,   generate_node,     sc.doc.Objects.AddPoint,    ("xyz",)),
+    "nodes": sof_geo_type("N",  "SOF_nodes",    color.DeepPink,     generate_node,     sc.doc.Objects.AddPoint,    ("xyz",)),
     "beams": sof_geo_type("B",  "SOF_beams",    color.MidnightBlue, generate_beam,     sc.doc.Objects.AddLine,     ("nodes", "length")),
     "trusses": sof_geo_type("B","SOF_trusses",  color.Turquoise,    generate_truss,    sc.doc.Objects.AddLine,     ("nodes", "length")),
     "cables": sof_geo_type("C", "SOF_cables",   color.Crimson,      generate_cable,    sc.doc.Objects.AddLine,     ("nodes", "length")),
-    "springs": sof_geo_type("C","SOF_springs",  color.Lime,         generate_spring,   sc.doc.Objects.AddLine,     ("nodes",)),
+    "springs": sof_geo_type("C","SOF_springs",  color.LimeGreen,         generate_spring,   sc.doc.Objects.AddLine,     ("nodes",)),
     "quads": sof_geo_type("Q",  "SOF_quads",    color.LightBlue,    generate_quad,     sc.doc.Objects.AddBrep,     ("nodes", "area")),
     "brics": sof_geo_type("V",  "SOF_brics",    color.Orange,       generate_bric,     sc.doc.Objects.AddMesh,     ("nodes", "volume"))
 }
