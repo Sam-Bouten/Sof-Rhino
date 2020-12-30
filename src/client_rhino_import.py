@@ -4,9 +4,9 @@ import sys
 sys.path += [os.getcwd()]
 import System
 import Rhino.UI as ui
-from file_manager import *
-from sof_read import *
-from rhino_write import *
+import io_manager as iom
+from sof_read import SofReader
+import rhino_write as rw
 
 
 def import_sof_cdb():
@@ -16,10 +16,13 @@ def import_sof_cdb():
     browser.Filter = "SOFiSTiK database files (*.cdb)|*.cdb"
     if browser.ShowDialog() == System.Windows.Forms.DialogResult.OK:
         cdb_path = browser.FileName
-        cdb_read_records = read_geometry()
-        cdb_dict = read_cdb(cdb_path, cdb_read_records)
-        scale_xyz(cdb_dict)
-        write_sof_geometry(cdb_dict)
+
+        with SofReader(cdb_path) as cdb:
+            cdb.read_geometry()
+            cdb_dict = cdb.data
+    
+        rw.scale_xyz(cdb_dict)
+        rw.write_sof_geometry(cdb_dict)
 
 
 if __name__ == "__main__":

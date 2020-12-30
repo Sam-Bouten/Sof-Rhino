@@ -201,8 +201,8 @@ def _generate_hexahedron(points):
 
 sof_geo_type = namedtuple("sof_geo", ["name_prefix", "layer_name", "layer_color", "generate", "add", "ignore_attributes"])
 sof_geometry_types = {
-    "nodes": sof_geo_type("N",  "SOF_nodes",    color.DodgerBlue,   generate_node,     sc.doc.Objects.AddPoint,    ("xyz",)),
-    "beams": sof_geo_type("B",  "SOF_beams",    color.DarkBlue,     generate_beam,     sc.doc.Objects.AddLine,     ("nodes", "length")),
+    "nodes": sof_geo_type("N",  "SOF_nodes",    color.DarkOrange,   generate_node,     sc.doc.Objects.AddPoint,    ("xyz",)),
+    "beams": sof_geo_type("B",  "SOF_beams",    color.MidnightBlue, generate_beam,     sc.doc.Objects.AddLine,     ("nodes", "length")),
     "trusses": sof_geo_type("B","SOF_trusses",  color.Turquoise,    generate_truss,    sc.doc.Objects.AddLine,     ("nodes", "length")),
     "cables": sof_geo_type("C", "SOF_cables",   color.Crimson,      generate_cable,    sc.doc.Objects.AddLine,     ("nodes", "length")),
     "springs": sof_geo_type("C","SOF_springs",  color.Lime,         generate_spring,   sc.doc.Objects.AddLine,     ("nodes",)),

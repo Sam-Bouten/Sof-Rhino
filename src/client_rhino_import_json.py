@@ -4,9 +4,8 @@ import sys
 sys.path += [os.getcwd()]
 import System
 import Rhino.UI as ui
-from file_manager import *
-from sof_read import *
-from rhino_write import *
+import io_manager as iom
+import rhino_write as rw
 
 
 def import_sof_json():
@@ -16,9 +15,9 @@ def import_sof_json():
     browser.Filter = "JSON files (*.json)|*.json"
     if browser.ShowDialog() == System.Windows.Forms.DialogResult.OK:
         json_path = browser.FileName
-        cdb_dict = read_from_json(json_path)
-        scale_xyz(cdb_dict)
-        write_sof_geometry(cdb_dict)
+        cdb_dict = iom.read_from_json(json_path)
+        rw.scale_xyz(cdb_dict)
+        rw.write_sof_geometry(cdb_dict)
 
 
 if __name__ == "__main__":
