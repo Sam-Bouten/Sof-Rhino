@@ -1,9 +1,9 @@
 import os
 import json
-from sof_read import SofReader
-import io_manager as iom
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
+from sof_read import SofReader
+import io_manager as iom
 
 
 def read_cdb():
