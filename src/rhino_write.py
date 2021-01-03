@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 import System.Drawing.Color as color
 import Rhino as rc
 import Rhino.Geometry as rg
@@ -153,8 +153,8 @@ def generate_quad(cdb_dict, sof_atts):
     sof_pts = sof_atts["nodes"]
     pts = [rg.Point3d(*xyz) for xyz in
           [cdb_dict["nodes"][sof_pt]["xyz"] for sof_pt in sof_pts]]
-    pts = _filter_duplicate_points(pts)
-    try: return rg.Brep.CreateFromCornerPoints(pts, tolerance=0.0001)
+    pts = list(OrderedDict.fromkeys(pts))
+    try: return rg.Brep.CreateFromCornerPoints(*pts, tolerance=0.0001)
     except: return None
 
 
@@ -196,12 +196,6 @@ def _generate_hexahedron(points):
             mesh.Faces.AddFace(*pt_set)
         return mesh
     except: return None
-
-
-def _filter_duplicate_points(pts):
-    """Filter a list of points for duplicate while preserving order."""
-    pts_set = set()
-    return [p for p in pts if not (p in pts_set or pts_set.add(p))]
 
 
 sof_geo_type = namedtuple("sof_geo", ["name_prefix", "layer_name", "layer_color", "generate", "add", "ignore_attributes"])
