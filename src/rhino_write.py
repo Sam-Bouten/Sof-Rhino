@@ -48,9 +48,6 @@ def write_sof_geometry(cdb_dict):
             # add Rhino object to document
             guid = geo_type.add(obj, att)
             if not guid: print("SOFiSTiK object {0} could not be added.".format(att.Name))
-    
-    sc.doc.Objects.UnselectAll()
-    sc.doc.Views.Redraw()
 
 
 def add_sof_layer(layer_name, layer_color):
@@ -60,6 +57,7 @@ def add_sof_layer(layer_name, layer_color):
     ----------
     layer_name : string
         Layer name in Rhino document.
+    
     layer_color: string
         Layer color in Rhino document.
     
@@ -155,7 +153,8 @@ def generate_quad(cdb_dict, sof_atts):
     sof_pts = sof_atts["nodes"]
     pts = [rg.Point3d(*xyz) for xyz in
           [cdb_dict["nodes"][sof_pt]["xyz"] for sof_pt in sof_pts]]
-    try: return rg.Brep.CreateFromCornerPoints(*set(pts), tolerance=0.0001)
+    pts = _filter_duplicate_points(pts)
+    try: return rg.Brep.CreateFromCornerPoints(pts, tolerance=0.0001)
     except: return None
 
 
@@ -199,16 +198,22 @@ def _generate_hexahedron(points):
     except: return None
 
 
+def _filter_duplicate_points(pts):
+    """Filter a list of points for duplicate while preserving order."""
+    pts_set = set()
+    return [p for p in pts if not (p in pts_set or pts_set.add(p))]
+
+
 sof_geo_type = namedtuple("sof_geo", ["name_prefix", "layer_name", "layer_color", "generate", "add", "ignore_attributes"])
 sof_geometry_types = {
     "nodes": sof_geo_type("N",  "SOF_nodes",    color.DeepPink,     generate_node,     sc.doc.Objects.AddPoint,    ("xyz",)),
     "beams": sof_geo_type("B",  "SOF_beams",    color.MidnightBlue, generate_beam,     sc.doc.Objects.AddLine,     ("nodes", "length")),
     "trusses": sof_geo_type("B","SOF_trusses",  color.Turquoise,    generate_truss,    sc.doc.Objects.AddLine,     ("nodes", "length")),
     "cables": sof_geo_type("C", "SOF_cables",   color.Crimson,      generate_cable,    sc.doc.Objects.AddLine,     ("nodes", "length")),
-    "springs": sof_geo_type("C","SOF_springs",  color.LimeGreen,         generate_spring,   sc.doc.Objects.AddLine,     ("nodes",)),
+    "springs": sof_geo_type("C","SOF_springs",  color.LimeGreen,    generate_spring,   sc.doc.Objects.AddLine,     ("nodes",)),
     "quads": sof_geo_type("Q",  "SOF_quads",    color.LightBlue,    generate_quad,     sc.doc.Objects.AddBrep,     ("nodes", "area")),
     "brics": sof_geo_type("V",  "SOF_brics",    color.Orange,       generate_bric,     sc.doc.Objects.AddMesh,     ("nodes", "volume"))
-}
+                    }
 
 
 if __name__=="__main__":

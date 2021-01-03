@@ -1,8 +1,6 @@
-#TODO fix pylint makrup on ctypes
-#TODO add function to get element groups
 #TODO add coupling elements
 #TODO translate bitcode for node support conditions
-#TODO add more data to beam/cable/truss elements (section numbers etc)
+#TODO read beam cross sections
 
 # -*- coding: utf-8 -*-
 import os
@@ -16,8 +14,8 @@ from sof_data_access import *
 __all__ = ["SofReader"]
 
 
-def read_sof_dtype(record_identifier, sof_dtype, sof_keys):
-    """Decorator to read datatype record from SOFiSTiK cdb.
+def read_sof_dtype(record_identifier, sof_dtype, sof_keys, position=None):
+    """Decorator to read datatype records from SOFiSTiK cdb.
 
     Parameters
     ----------
@@ -29,6 +27,9 @@ def read_sof_dtype(record_identifier, sof_dtype, sof_keys):
 
     sof_keys : tuple
         Keys identifying the record datatype.
+    
+    position: int
+        Position of current record.
     """
     def read_dtype(read_record):
         def wrapper(cdb):
@@ -38,18 +39,21 @@ def read_sof_dtype(record_identifier, sof_dtype, sof_keys):
             if not cdb._validate_cdb_keys(sof_keys):
                 return {record_identifier: dtype_dict}
 
-            # set up error and length counters
+            # set up error, position, and record length counters
             error_flag = c_int(0)
+            pos = c_int(position if position != None else 1)  
             record_len = c_int(sizeof(sof_dtype))
 
             # loop over elements in record
-            while error_flag.value == 0:
+            while error_flag.value < 2:
                 error_flag.value = cdb.get_cdb(cdb.index, sof_keys[0], sof_keys[1],
-                                            byref(sof_dtype), byref(record_len), 1)
+                                            byref(sof_dtype), byref(record_len), pos)
                 record_data = read_record(cdb)
-                record_len = c_int(sizeof(sof_dtype))
-                if not record_data: continue
-                dtype_dict.update(record_data)
+                # print(record_identifier, "   ", record_len.value)
+                pos.value = 1
+                record_len.value = sizeof(sof_dtype)
+                if record_data:
+                    dtype_dict.update(record_data)
 
             cdb.data[record_identifier] = dtype_dict
         
@@ -73,7 +77,6 @@ class SofReader(object):
         File name of SOFiSTiK C library containing database access functions.
     """
 
-
     def __init__(self, cdb, sof_path=None, dll_name=None):
         self.cdb = cdb
         self.sof_path = sof_path
@@ -81,6 +84,19 @@ class SofReader(object):
         self.index = c_int()
         self.status = c_int()
         self.data = {}
+
+        self._fix_flags = [ (1024,   "", ""),             # warping
+                             (512,   "", ""),             # relative rotation
+                             (256,   "", ""),             # relative rotation
+                             (128,   "", ""),             # split continuous beams
+                              (64,   "", "PxPyPzMxMyMz"),
+                              (32, "Mz", ""),
+                              (16, "My", ""),
+                               (8, "Mx", ""),
+                               (4, "Pz", ""),
+                               (2, "Py", ""),
+                               (1, "Px", "")
+                          ]
     
 
     def __enter__(self):
@@ -245,31 +261,46 @@ class SofReader(object):
         elif self.keys_exist(*sof_keypair) == 2:
             print("Key {0:>3} {1:>2} read".format(sof_keypair[0], sof_keypair[1]))
             return True
-    
+
+
+    @read_sof_dtype("system", csyst, (10, 0))
+    def read_system(self):
+        return {"gdiv" : csyst.m_igdiv}
+
 
     @read_sof_dtype("nodes", cnode, (20, 0))
     def read_nodes(self):
-        #TODO parse bitcodes of DoF supports:
-        # https://www.sofistik.de/documentation/2020/en/cdb_interfaces/vba/examples/vba_example3.html
         if cnode.m_nr <= 0: return None
         return {cnode.m_nr : {"xyz" : list(cnode.m_xyz),
-                              "dof" : cnode.m_kfix
+                              "fix" : self._decode_node_fix(cnode.m_kfix)
                              }}
 
 
     @read_sof_dtype("beams", cbeam, (100, 0))
     def read_beams(self):
-        #TODO read other records to get beam properties
         if cbeam.m_nr <= 0: return None
-        return {cbeam.m_nr : {"nodes"  : list(cbeam.m_node),
-                              "length" : cbeam.m_dl
+        return {cbeam.m_nr : {"group"  : self._get_group(cbeam.m_nr),
+                              "nodes"  : list(cbeam.m_node),
+                              "length" : cbeam.m_dl,
+                              "x_start": [e[0] for e in cbeam.m_ex],
+                              "x_end"  : [e[1] for e in cbeam.m_ex]
                              }}
+
+
+    @read_sof_dtype("beam_sections", cbeam_sct, (100, 0), 1)
+    def read_beam_sections(self):
+        if cbeam_sct.m_id <= 0: return None
+        return {cbeam_sct.m_id : {"section"  : cbeam_sct.m_nq,
+                                  "bitcodes" : cbeam_sct.m_ityp,
+                                  "hinges"   : cbeam_sct.m_itp2
+                                  }}
 
 
     @read_sof_dtype("trusses", ctrus, (150, 0))
     def read_trusses(self):
         if ctrus.m_nr <= 0: return None
-        return {ctrus.m_nr : {"nodes"  : list(ctrus.m_node),
+        return {ctrus.m_nr : {"group"  : self._get_group(ctrus.m_nr),
+                              "nodes"  : list(ctrus.m_node),
                               "length" : ctrus.m_dl,
                               "section": ctrus.m_nrq,
                               "pre"    : ctrus.m_pre,
@@ -281,7 +312,8 @@ class SofReader(object):
     @read_sof_dtype("cables", ccabl, (160, 0))
     def read_cables(self):
         if ccabl.m_nr <= 0: return None
-        return {ccabl.m_nr : {"nodes"  : list(ccabl.m_node),
+        return {ccabl.m_nr : {"group"  : self._get_group(ccabl.m_nr),
+                              "nodes"  : list(ccabl.m_node),
                               "length" : ccabl.m_dl,
                               "section": ccabl.m_nrq,
                               "pre"    : ccabl.m_pre,
@@ -293,7 +325,8 @@ class SofReader(object):
     @read_sof_dtype("springs", cspri, (170, 0))
     def read_springs(self):
         if cspri.m_nr <= 0: return None
-        return {cspri.m_nr : {"nodes"  : list(cspri.m_node),
+        return {cspri.m_nr : {"group"  : self._get_group(cspri.m_nr),
+                              "nodes"  : list(cspri.m_node),
                               "normal" : list(cspri.m_t),
                               "k_long" : cspri.m_cp,
                               "k_trvs" : cspri.m_cq,
@@ -305,7 +338,8 @@ class SofReader(object):
     def read_quads(self):
         if cquad.m_nr <= 0: return None
         det_multiplier = 4
-        return {cquad.m_nr : {"nodes"  : list(cquad.m_node),
+        return {cquad.m_nr : {"group"  : self._get_group(cquad.m_nr),
+                              "nodes"  : list(cquad.m_node),
                               "type"   : cquad.m_nra,
                               "thick"  : cquad.m_thick[0],
                               "mat"    : cquad.m_mat,
@@ -316,24 +350,49 @@ class SofReader(object):
     @read_sof_dtype("brics", cbric, (300, 0))
     def read_brics(self):
         if cbric.m_nr <= 0: return None
-        # multiplier for Jacobian determinant
+        # get volume multiplier for Jacobian determinant
         if (cbric.m_node[-1] == cbric.m_node[-2]): # tetrahedron
             det_multiplier = 4 / 3
         else: # hexahedron
             det_multiplier = 8
-        return {cbric.m_nr : {"nodes"  : list(cbric.m_node),
+        return {cbric.m_nr : {"group"  : self._get_group(cbric.m_nr),
+                              "nodes"  : list(cbric.m_node),
                               "type"   : cbric.m_nra,
                               "mat"    : cbric.m_mat,
                               "volume" : cbric.m_det[0] * det_multiplier
                              }}
 
 
+    def _get_group(self, elem_nr):
+        system_data =  self.data.get("system")
+        if not system_data: return 0
+        gdiv = system_data.get("gdiv")
+        return int(elem_nr/gdiv)
+
+
+    @property
+    def fix_flags(self):
+        return self._fix_flags
+
+    def _decode_node_fix(self, bitcode):
+        value = ""
+        for fix in self.fix_flags:
+            temp_bc = bitcode - fix[0] 
+            if temp_bc >= 0:
+                bitcode = temp_bc
+                value = str.replace(value, fix[1], fix[2])
+
+        return value
+
+
     def read_geometry(self):
         """Read out all geometry data in cdb.
         Collection method.
         """
+        self.read_system()
         self.read_nodes()
         self.read_beams()
+        # self.read_beam_sections()
         self.read_trusses()
         self.read_cables()
         self.read_springs()
