@@ -2,6 +2,7 @@ import os
 import json
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
+
 from sof_read import SofReader
 import io_manager as iom
 

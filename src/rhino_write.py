@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from collections import namedtuple, OrderedDict
+
 import System.Drawing.Color as color
 import Rhino as rc
 import Rhino.Geometry as rg

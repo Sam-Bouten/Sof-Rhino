@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-__version__ = "0.0.01"
+__version__ = "0.1"
 __author__ =  "Sam Bouten"
 
 import file_manager

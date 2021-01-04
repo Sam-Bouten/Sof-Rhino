@@ -1,13 +1,15 @@
+# -*- coding: utf-8 -*-
 #TODO add coupling elements
 #TODO translate bitcode for node support conditions
 #TODO read beam cross sections
 
-# -*- coding: utf-8 -*-
+
 import os
 import glob
 import platform
 from ctypes import *
 from collections import namedtuple
+
 from sof_data_access import *
 
 
