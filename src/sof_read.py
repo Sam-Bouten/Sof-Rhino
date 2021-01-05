@@ -398,6 +398,19 @@ class SofReader(object):
                              }}
 
 
+    @read_sof_dtype("beam_forces", cbeam_for, (102, None))
+    def read_beam_forces(self):
+        if cbeam_for.m_nr <= 0: return None
+        return {cbeam_for.m_nr : {"se"    : "end" if cbeam_for.m_x else "start",
+                                  "nx"    : cbeam_for.m_n,
+                                  "vy"    : cbeam_for.m_vy,
+                                  "vz"    : cbeam_for.m_vz,
+                                  "mx"    : cbeam_for.m_mt,
+                                  "my"    : cbeam_for.m_my,
+                                  "mz"    : cbeam_for.m_mz
+                                 }}
+
+
     @read_sof_dtype("bric_stresses", cbric_str, (310, None))
     def read_bric_stresses(self):
         if cbric_str.m_nr <= 0: return None
@@ -446,6 +459,10 @@ class SofReader(object):
         self.read_quads()
         self.read_brics()
 
+
+    def read_results(self):
+        self.read_beam_forces()
+        self.read_bric_stresses()
 
 
 if __name__ == "__main__":

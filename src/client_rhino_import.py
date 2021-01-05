@@ -24,8 +24,9 @@ def import_sof_cdb():
 
         with SofReader(cdb_path) as cdb:
             cdb.read_geometry()
-            cdb.read_bric_stresses()
+            cdb.read_results()
             cdb_dict = cdb.data
+        
         rm.scale_xyz(cdb_dict)
         rw.write_sof_geometry(cdb_dict)
         rw.write_sof_results(cdb_dict)
@@ -38,6 +39,3 @@ def import_sof_cdb():
 
 if __name__ == "__main__":
     import_sof_cdb()
-
-    # obj = sc.doc.Objects.FindByUserString("name", "B110062", True)
-    # print(obj)[0].Geometry.PointAtStart

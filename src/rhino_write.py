@@ -79,6 +79,7 @@ def add_sof_layer(layer_name, layer_color=color.Black, parent_layer=None):
     sof_layer : RhinoDoc.DocObjects.Layer
         Rhino layer object with input properties.
     """
+    purge_sof_layers()
     master_layer = add_sof_master_layer()
     sof_layer = sc.doc.Layers.FindName(layer_name)
     if sof_layer:
@@ -244,7 +245,7 @@ def generate_bric_stresses(cdb_dict):
         load_case_layer.IsVisible = False
         load_case_layer.SetPersistentVisibility(True)
 
-        layer_names = ["σ₁_" + str(load_case), "σ₂_" + str(load_case), "σ₃_" + str(load_case)]
+        layer_names = ["σI_" + str(load_case), "σII_" + str(load_case), "σIII_" + str(load_case)]
         stress_layers =  [add_sof_layer(layer_name, parent_layer=load_case_name)
                          for layer_name in layer_names]
 
@@ -254,11 +255,10 @@ def generate_bric_stresses(cdb_dict):
 
             # generate result geometry
             stresses, vectors = rm.get_principal_stresses(sof_res)
-            for σ, vec, name, layer in zip(stresses, vectors, ("Vσ₁", "Vσ₂", "Vσ₃"), stress_layers):
+            for σ, vec, name, layer in zip(stresses, vectors, ("VσI", "VσII", "VσIII"), stress_layers):
                 res = abs(σ)
                 if res < 1E-3: continue  # cutoff value for small results
-                #TODO correct scale of elements
-                vec_offset = [(res/20) * rm.get_unit_scale() * v for v in vec]
+                vec_offset = [(res/200) * rm.get_unit_scale() * v for v in vec]
                 sp = rg.Point3d(*[c - v for c, v in zip(centroid, vec_offset)])
                 ep = rg.Point3d(*[c + v for c, v in zip(centroid, vec_offset)])
                 obj = rg.Line(sp, ep)

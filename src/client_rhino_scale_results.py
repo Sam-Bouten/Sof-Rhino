@@ -4,7 +4,7 @@ import Rhino.Input as ri
 import rhino_misc as rm
 
 def scale_results():
-    """Scale all SOFiSTiK result objects in Rhino file0.5."""
+    """Scale all SOFiSTiK result objects in Rhino file."""
     res_scale = 1.0
     command_result, res_scale = ri.RhinoGet.GetNumber("Input scale factor for results.", False, res_scale)
     if command_result != rc.Commands.Result.Success: return
