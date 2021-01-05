@@ -11,6 +11,7 @@ import scriptcontext as sc
 import io_manager as iom
 from sof_read import SofReader
 import rhino_write as rw
+import rhino_misc as rm
 
 
 def import_sof_cdb():
@@ -23,9 +24,11 @@ def import_sof_cdb():
 
         with SofReader(cdb_path) as cdb:
             cdb.read_geometry()
+            cdb.read_bric_stresses()
             cdb_dict = cdb.data
-        rw.scale_xyz(cdb_dict)
+        rm.scale_xyz(cdb_dict)
         rw.write_sof_geometry(cdb_dict)
+        rw.write_sof_results(cdb_dict)
 
         rs.ZoomExtents(all=True)
         sc.doc.Objects.UnselectAll()
@@ -35,3 +38,6 @@ def import_sof_cdb():
 
 if __name__ == "__main__":
     import_sof_cdb()
+
+    # obj = sc.doc.Objects.FindByUserString("name", "B110062", True)
+    # print(obj)[0].Geometry.PointAtStart

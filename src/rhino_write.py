@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 from collections import namedtuple, OrderedDict
 
+import System
 import System.Drawing.Color as color
 import Rhino as rc
 import Rhino.Geometry as rg
 import scriptcontext as sc
+import rhinoscriptsyntax as rs
+import rhino_misc as rm
 
 
 __all__ = [
     "write_sof_geometry",
-    "add_sof_layer",
-    "get_unit_scale",
-    "scale_xyz"
+    "write_sof_results"
     ]
 
 
@@ -37,13 +38,14 @@ def write_sof_geometry(cdb_dict):
             if not obj: continue
             att = sc.doc.CreateDefaultAttributes()
             att.Name = geo_type.name_prefix + str(sof_id)
+            att.SetUserString("name", att.Name)
             att.LayerIndex = sof_layer.Index
 
             # add SOFiSTiK attributes as user text
             for att_key, att_value in sof_atts.items():
                 if att_key in geo_type.ignore_attributes: continue
                 if isinstance(att_value, list):
-                    att_value = ", ".join( str(i) for i in (att_value))
+                    att_value = ", ".join(str(i) for i in (att_value))
                 att.SetUserString(str(att_key), str(att_value))
 
             # add Rhino object to document
@@ -51,7 +53,14 @@ def write_sof_geometry(cdb_dict):
             if not guid: print("SOFiSTiK object {0} could not be added.".format(att.Name))
 
 
-def add_sof_layer(layer_name, layer_color):
+def write_sof_results(cdb_dict):
+    """Add SOFiSTiK result objects and their attributes into Rhino document."""
+    return generate_bric_stresses(cdb_dict)
+    #TODO add generalized result processor which calls result generation functions,
+    #   similar to write_sof_geometry()
+
+
+def add_sof_layer(layer_name, layer_color=color.Black, parent_layer=None):
     """Add layer to Rhino document, clear all objects from layer if pre-existing.
     
     Parameters
@@ -62,11 +71,15 @@ def add_sof_layer(layer_name, layer_color):
     layer_color: string
         Layer color in Rhino document.
     
+    parent_layer : string
+        Parent layer name in Rhino document.
+    
     Returns
     -------
     sof_layer : RhinoDoc.DocObjects.Layer
         Rhino layer object with input properties.
     """
+    master_layer = add_sof_master_layer()
     sof_layer = sc.doc.Layers.FindName(layer_name)
     if sof_layer:
         obj_to_clear = sc.doc.Objects.FindByLayer(layer_name)
@@ -78,28 +91,41 @@ def add_sof_layer(layer_name, layer_color):
         sof_layer.Color = layer_color
         sc.doc.Layers.Add(sof_layer)
         sof_layer = sc.doc.Layers.FindName(layer_name)
+    
+    if parent_layer:
+        p_layer = sc.doc.Layers.FindName(parent_layer)
+        if p_layer:
+            sof_layer.ParentLayerId = p_layer.Id
+    else:
+        sof_layer.ParentLayerId = master_layer.Id
+        
     return sof_layer
 
 
-def get_unit_scale():
-    """Return scale factor according to active Rhino document unit system."""
-    if "scale" not in globals():
-        global scale
-        units = sc.doc.ModelUnitSystem
-        if str(units) == "Meters": scale = 1.0
-        elif str(units) == "Millimeters": scale = 1000.0
-        elif str(units) == "Centimeters": scale = 100.0
-        elif str(units) == "Feet": scale = 3.28084
-        elif str(units) == "Inches": scale = 39.3701
-        else: scale = 1.0
-    return globals()["scale"]
+def add_sof_master_layer():
+    """Add topmost SOFiSTiK parent layer to Rhino document."""
+    master_name = "SOF"
+    check_layer = sc.doc.Layers.FindName(master_name)
+    if check_layer: return check_layer
+    master_layer = rc.DocObjects.Layer()
+    master_layer.Name = master_name
+    sc.doc.Layers.Add(master_layer)
+    master_layer = sc.doc.Layers.FindName(master_name)
+    return master_layer
 
 
-def scale_xyz(cdb_dict):
-    """Scale nodal coordinates in cdb dictionary, in place."""
-    scale = get_unit_scale()
-    for node_id in cdb_dict["nodes"].keys():
-        cdb_dict["nodes"][node_id]["xyz"] = [scale * c for c in cdb_dict["nodes"][node_id]["xyz"]]
+def purge_sof_layers():
+    """Clear all SOFiSTiK layers."""
+    if "sof_purged" in globals(): return
+    master_name = "SOF"
+    check_layer = sc.doc.Layers.FindName(master_name)
+    if check_layer:
+        existing_layers = rm.get_layer_progeny(master_name)
+        for layer_name in reversed(existing_layers):
+            rs.PurgeLayer(layer_name)
+
+    global sof_purged
+    sof_purged = True
 
 
 def generate_node(cdb_dict, sof_atts):
@@ -141,7 +167,7 @@ def generate_spring(cdb_dict, sof_atts):
     sp = rg.Point3d(*cdb_dict["nodes"][sof_sp]["xyz"])
     if sof_ep == 0: # support spring
         direction = rg.Vector3d(*sof_atts["normal"])
-        try: return rg.Line(sp, direction, 0.1 * get_unit_scale())
+        try: return rg.Line(sp, direction, 0.1 * rm.get_unit_scale())
         except: return None
     else: # connective spring
         ep = rg.Point3d(*cdb_dict["nodes"][sof_ep]["xyz"])
@@ -171,6 +197,10 @@ def generate_bric(cdb_dict, sof_atts):
     
     pts = [rg.Point3d(*xyz) for xyz in
           [cdb_dict["nodes"][sof_pt]["xyz"] for sof_pt in lookup_pts]]
+    
+    centroid = [sum(c) / len(pts) for c in zip(*pts)] 
+    sof_atts["centroid"] = centroid
+
     return generate_func(pts)
 
 
@@ -199,17 +229,62 @@ def _generate_hexahedron(points):
     except: return None
 
 
-sof_geo_type = namedtuple("sof_geo", ["name_prefix", "layer_name", "layer_color", "generate", "add", "ignore_attributes"])
-sof_geometry_types = {
-    "nodes": sof_geo_type("N",  "SOF_nodes",    color.DeepPink,     generate_node,     sc.doc.Objects.AddPoint,    ("xyz",)),
-    "beams": sof_geo_type("B",  "SOF_beams",    color.MidnightBlue, generate_beam,     sc.doc.Objects.AddLine,     ("nodes", "length")),
-    "trusses": sof_geo_type("B","SOF_trusses",  color.Turquoise,    generate_truss,    sc.doc.Objects.AddLine,     ("nodes", "length")),
-    "cables": sof_geo_type("C", "SOF_cables",   color.Crimson,      generate_cable,    sc.doc.Objects.AddLine,     ("nodes", "length")),
-    "springs": sof_geo_type("C","SOF_springs",  color.LimeGreen,    generate_spring,   sc.doc.Objects.AddLine,     ("nodes",)),
-    "quads": sof_geo_type("Q",  "SOF_quads",    color.LightBlue,    generate_quad,     sc.doc.Objects.AddBrep,     ("nodes", "area")),
-    "brics": sof_geo_type("V",  "SOF_brics",    color.Orange,       generate_bric,     sc.doc.Objects.AddMesh,     ("nodes", "volume"))
-                    }
+def generate_bric_stresses(cdb_dict):
+    """Generate Rhino line geometry for SOFiSTiK bric."""
+    #TODO generalize result processor in write_sof_results()
+    result_data = cdb_dict.get("bric_stresses")
+    if not result_data: return
 
+    # set result layers
+    results_layer = add_sof_layer("SOF_Results")
+    add_sof_layer("SOF_Bric_Stress", parent_layer="SOF_Results")
+    for load_case, load_case_results in result_data.items():
+        load_case_name = "LC" + str(load_case)
+        load_case_layer = add_sof_layer(load_case_name, parent_layer="SOF_Bric_Stress")
+        load_case_layer.IsVisible = False
+        load_case_layer.SetPersistentVisibility(True)
+
+        layer_names = ["σ₁_" + str(load_case), "σ₂_" + str(load_case), "σ₃_" + str(load_case)]
+        stress_layers =  [add_sof_layer(layer_name, parent_layer=load_case_name)
+                         for layer_name in layer_names]
+
+        for sof_id, sof_res in load_case_results.items():
+            centroid = cdb_dict["brics"][sof_id].get("centroid")
+            if not centroid: return
+
+            # generate result geometry
+            stresses, vectors = rm.get_principal_stresses(sof_res)
+            for σ, vec, name, layer in zip(stresses, vectors, ("Vσ₁", "Vσ₂", "Vσ₃"), stress_layers):
+                res = abs(σ)
+                if res < 1E-3: continue  # cutoff value for small results
+                #TODO correct scale of elements
+                vec_offset = [(res/20) * rm.get_unit_scale() * v for v in vec]
+                sp = rg.Point3d(*[c - v for c, v in zip(centroid, vec_offset)])
+                ep = rg.Point3d(*[c + v for c, v in zip(centroid, vec_offset)])
+                obj = rg.Line(sp, ep)
+
+                att = sc.doc.CreateDefaultAttributes()
+                att.Name = name + str(sof_id)
+                att.LayerIndex = layer.Index
+                att.ObjectColor = color.Red if σ > 0 else color.DeepSkyBlue
+                att.ColorSource = rc.DocObjects.ObjectColorSource.ColorFromObject
+                att.SetUserString("stress", str(round(σ, 4)))
+
+                # add result object to document
+                guid = sc.doc.Objects.AddLine(obj, att)
+                if not guid: print("SOFiSTiK result object {0} could not be added.".format(att.Name))
+
+
+sof_type = namedtuple("sof_geo", ["name_prefix", "layer_name", "layer_color", "generate", "add", "ignore_attributes"])
+sof_geometry_types = {
+    "nodes": sof_type("N",  "SOF_Nodes",        color.DeepPink,     generate_node,     sc.doc.Objects.AddPoint,    ("xyz",)),
+    "beams": sof_type("B",  "SOF_Beams",        color.MidnightBlue, generate_beam,     sc.doc.Objects.AddLine,     ("nodes", "length")),
+    "trusses": sof_type("B","SOF_Trusses",      color.Turquoise,    generate_truss,    sc.doc.Objects.AddLine,     ("nodes", "length")),
+    "cables": sof_type("C", "SOF_Cables",       color.Crimson,      generate_cable,    sc.doc.Objects.AddLine,     ("nodes", "length")),
+    "springs": sof_type("C","SOF_Springs",      color.LimeGreen,    generate_spring,   sc.doc.Objects.AddLine,     ("nodes",)),
+    "quads": sof_type("Q",  "SOF_Quads",        color.LightBlue,    generate_quad,     sc.doc.Objects.AddBrep,     ("nodes", "area")),
+    "brics": sof_type("V",  "SOF_Brics",        color.Orange,       generate_bric,     sc.doc.Objects.AddMesh,     ("nodes", "volume")),
+                    }
 
 if __name__=="__main__":
     pass

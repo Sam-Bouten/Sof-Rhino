@@ -15,6 +15,7 @@ def read_cdb():
 
     with SofReader(cdb_path) as cdb:
         cdb.read_geometry()
+        cdb.read_bric_stresses()
         geo_dict = cdb.data
 
     json_path = (os.path.join(os.path.dirname(cdb_path),
